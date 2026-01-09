@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koert.fm | On Air</title>
+    <style>
+        :root { --spotify-green: #1DB954; --bg-dark: #121212; --card-bg: #181818; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-dark); color: white; margin: 0; padding: 20px; }
+        
+        /* Speler Sectie */
+        .player-container { max-width: 500px; margin: 0 auto; text-align: center; padding: 40px 20px; }
+        #album-art { width: 300px; height: 300px; background: #333; margin: 0 auto 20px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .track-info h1 { margin: 10px 0; font-size: 24px; }
+        .track-info p { color: #b3b3b3; font-size: 18px; }
+
+        /* Admin Paneel */
+        .admin-section { max-width: 800px; margin: 50px auto; border-top: 1px solid #333; padding-top: 20px; }
+        .track-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: var(--card-bg); border-radius: 8px; overflow: hidden; }
+        .track-table th, .track-table td { padding: 12px; text-align: left; border-bottom: 1px solid #282828; }
+        .tag { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .tag-a { background: #ffd700; color: black; }
+        .tag-b { background: #c0c0c0; color: black; }
+
+        .btn-auth { background: var(--spotify-green); color: white; border: none; padding: 12px 24px; border-radius: 25px; font-weight: bold; cursor: pointer; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="player-container">
+        <div id="login-screen">
+            <h1>Koert.fm</h1>
+            <p>Log in met Spotify Premium om te luisteren.</p>
+            <button class="btn-auth" onclick="loginSpotify()">LOGIN MET SPOTIFY</button>
+        </div>
+
+        <div id="player-ui" class="hidden">
+            <div id="album-art"><img id="current-art" src="" width="100%" style="border-radius: 8px;"></div>
+            <div class="track-info">
+                <h1 id="current-title">Geen muziek...</h1>
+                <p id="current-artist">Druk op play</p>
+            </div>
+            <div id="jingle-indicator" style="color: var(--spotify-green); font-weight: bold; margin-top: 10px;" class="hidden">
+                ♪ KOERT FM JINGLE ♪
+            </div>
+        </div>
+    </div>
+
+    <div id="admin-ui" class="admin-section hidden">
+        <h2>Studio Manager</h2>
+        <p>Selecteer de rotatie voor je playlist-nummers:</p>
+        <table class="track-table">
+            <thead>
+                <tr>
+                    <th>Track</th>
+                    <th>Artiest</th>
+                    <th>A-Rotatie (Top 5)</th>
+                    <th>B-Rotatie (Top 5)</th>
+                </tr>
+            </thead>
+            <tbody id="admin-track-list">
+                </tbody>
+        </table>
+    </div>
+
+    <script src="https://sdk.scdn.co/spotify-player.js"></script>
+    <script type="module">
+        // Hier komt de Firebase en Spotify Logica
+        console.log("Radio Koert ready for input.");
+    </script>
+</body>
+</html>
