@@ -3,136 +3,226 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Koert.fm | On Air</title>
+    <title>Koert.fm | Live Studio</title>
     <style>
         :root { --spotify-green: #1DB954; --bg-dark: #121212; --card-bg: #181818; }
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-dark); color: white; margin: 0; padding: 20px; }
-        
-        /* Speler Sectie */
-        .player-container { max-width: 500px; margin: 0 auto; text-align: center; padding: 40px 20px; }
-        #album-art { width: 300px; height: 300px; background: #333; margin: 0 auto 20px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .track-info h1 { margin: 10px 0; font-size: 24px; }
-        .track-info p { color: #b3b3b3; font-size: 18px; }
-
-        /* Admin Paneel */
-        .admin-section { max-width: 800px; margin: 50px auto; border-top: 1px solid #333; padding-top: 20px; }
-        .track-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: var(--card-bg); border-radius: 8px; overflow: hidden; }
-        .track-table th, .track-table td { padding: 12px; text-align: left; border-bottom: 1px solid #282828; }
-        .tag { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-        .tag-a { background: #ffd700; color: black; }
-        .tag-b { background: #c0c0c0; color: black; }
-
-        .btn-auth { background: var(--spotify-green); color: white; border: none; padding: 12px 24px; border-radius: 25px; font-weight: bold; cursor: pointer; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg-dark); color: white; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .player-card { background: var(--card-bg); padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 40px; }
+        #album-art { width: 250px; height: 250px; background: #333; margin: 0 auto 20px; border-radius: 8px; display: block; object-fit: cover; }
+        .btn { background: var(--spotify-green); color: white; border: none; padding: 15px 30px; border-radius: 30px; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.2s; }
+        .btn:hover { transform: scale(1.05); }
+        .admin-box { background: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px solid #333; overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #282828; }
         .hidden { display: none; }
     </style>
 </head>
 <body>
 
-    <div class="player-container">
-        <div id="login-screen">
-            <h1>Koert.fm</h1>
-            <p>Log in met Spotify Premium om te luisteren.</p>
-            <button class="btn-auth" onclick="loginSpotify()">LOGIN MET SPOTIFY</button>
-        </div>
-
-        <div id="player-ui" class="hidden">
-            <div id="album-art"><img id="current-art" src="" width="100%" style="border-radius: 8px;"></div>
-            <div class="track-info">
-                <h1 id="current-title">Geen muziek...</h1>
-                <p id="current-artist">Druk op play</p>
-            </div>
-            <div id="jingle-indicator" style="color: var(--spotify-green); font-weight: bold; margin-top: 10px;" class="hidden">
-                ♪ KOERT FM JINGLE ♪
-            </div>
-        </div>
+<div class="container">
+    <div id="login-screen" class="player-card">
+        <h1>Koert.fm</h1>
+        <p>Maak verbinding met je Spotify Premium account.</p>
+        <button class="btn" onclick="loginSpotify()">START RADIO</button>
     </div>
 
-    <div id="admin-ui" class="admin-section hidden">
-        <h2>Studio Manager</h2>
-        <p>Selecteer de rotatie voor je playlist-nummers:</p>
-        <table class="track-table">
+    <div id="player-ui" class="player-card hidden">
+        <div id="radio-status" style="color: var(--spotify-green); font-weight: bold;">STAND-BY</div>
+        <img id="album-art" src="https://via.placeholder.com/250" alt="Album Art">
+        <h2 id="track-title">Druk op Play om de stream te starten</h2>
+        <p id="track-artist"></p>
+        <button id="play-btn" class="btn">LAAD PLAYER...</button>
+    </div>
+
+    <div id="admin-ui" class="admin-box hidden">
+        <h3>Studio Manager (A/B Rotatie)</h3>
+        <table>
             <thead>
                 <tr>
                     <th>Track</th>
                     <th>Artiest</th>
-                    <th>A-Rotatie (Top 5)</th>
-                    <th>B-Rotatie (Top 5)</th>
+                    <th>A (Top 5)</th>
+                    <th>B (Top 5)</th>
                 </tr>
             </thead>
-            <tbody id="admin-track-list">
-                </tbody>
+            <tbody id="track-table-body"></tbody>
         </table>
     </div>
+</div>
 
-    <script src="https://sdk.scdn.co/spotify-player.js"></script>
-    <script type="module">
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyCw5AJyDYcqWxsYF5XDsu9FDnROTtkyWOE",
-  authDomain: "koert-fm.firebaseapp.com",
-  databaseURL: "https://koert-fm-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "koert-fm",
-  storageBucket: "koert-fm.firebasestorage.app",
-  messagingSenderId: "944188148886",
-  appId: "1:944188148886:web:f76e33a9d8b6d4307bc6b7",
-  measurementId: "G-N01R7JRNYR"
-};
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-// PLAK HIER JE FIREBASE CONFIG DIE JE NET HEBT GEKOPIEERD
-const firebaseConfig = {
-  apiKey: "AIza...",
-  authDomain: "koertfm.firebaseapp.com",
-  databaseURL: "https://koertfm-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "koertfm",
-  storageBucket: "koertfm.appspot.com",
-  messagingSenderId: "...",
-  appId: "..."
-};
+    // --- CONFIGURATIE ---
+    const CLIENT_ID = 'VUL_HIER_JE_SPOTIFY_CLIENT_ID_IN'; 
+    const PLAYLIST_ID = 'VUL_HIER_JE_PLAYLIST_ID_IN';
+    const REDIRECT_URI = window.location.origin + window.location.pathname;
 
-// Importeer Firebase functies
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+    const firebaseConfig = {
+        apiKey: "AIzaSyCw5AJyDYcqWxsYF5XDsu9FDnROTtkyWOE",
+        authDomain: "koert-fm.firebaseapp.com",
+        databaseURL: "https://koert-fm-default-rtdb.europe-west1.firebasedatabase.app",
+        projectId: "koert-fm",
+        appId: "1:944188148886:web:f76e33a9d8b6d4307bc6b7"
+    };
 
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
 
-// Globale staat van de radio
-let rotationA = [];
-let rotationB = [];
+    let state = {
+        token: null,
+        player: null,
+        deviceId: null,
+        allTracks: [],
+        rotationA: [],
+        rotationB: [],
+        history: [],
+        counter: 0,
+        jingleAudio: new Audio()
+    };
 
-// Luister naar veranderingen in de database
-onValue(ref(db, 'rotations'), (snapshot) => {
-    const data = snapshot.val() || { a: [], b: [] };
-    rotationA = data.a || [];
-    rotationB = data.b || [];
-    console.log("Nieuwe rotatie ingeladen:", { rotationA, rotationB });
-    // Hier roepen we later een functie aan om de vinkjes in de lijst te updaten
-});
+    // --- SPOTIFY AUTH ---
+    window.loginSpotify = () => {
+        const scope = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state';
+        window.location.href = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`;
+    };
 
-// Functie om een nummer in een lijst te zetten
-window.toggleRotation = function(trackId, type) {
-    let currentList = (type === 'A') ? [...rotationA] : [...rotationB];
-    
-    if (currentList.includes(trackId)) {
-        currentList = currentList.filter(id => id !== trackId);
-    } else {
-        if (currentList.length >= 5) currentList.shift(); // Max 5, oudste weg
-        currentList.push(trackId);
+    const checkToken = () => {
+        const params = new URLSearchParams(window.location.hash.substring(1));
+        state.token = params.get('access_token');
+        if (state.token) {
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('player-ui').classList.remove('hidden');
+            document.getElementById('admin-ui').classList.remove('hidden');
+            initRadio();
+        }
+    };
+
+    // --- RADIO ENGINE ---
+    async function initRadio() {
+        onValue(ref(db, 'rotations'), (snapshot) => {
+            const val = snapshot.val() || {};
+            state.rotationA = val.a || [];
+            state.rotationB = val.b || [];
+            fetchTracks();
+        });
     }
 
-    // Opslaan in de cloud
-    set(ref(db, 'rotations/' + type.toLowerCase()), currentList);
-}
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
-    </script>
+    async function fetchTracks() {
+        const res = await fetch(`https://api.spotify.com/v1/playlists/${PLAYLIST_ID}/tracks`, {
+            headers: { 'Authorization': `Bearer ${state.token}` }
+        });
+        const data = await res.json();
+        state.allTracks = data.items.map(i => i.track);
+        renderAdmin();
+    }
+
+    function renderAdmin() {
+        const body = document.getElementById('track-table-body');
+        body.innerHTML = state.allTracks.map(t => `
+            <tr>
+                <td>${t.name}</td>
+                <td>${t.artists[0].name}</td>
+                <td><input type="checkbox" ${state.rotationA.includes(t.id) ? 'checked' : ''} onchange="window.updateRot('${t.id}', 'A')"></td>
+                <td><input type="checkbox" ${state.rotationB.includes(t.id) ? 'checked' : ''} onchange="window.updateRot('${t.id}', 'B')"></td>
+            </tr>
+        `).join('');
+    }
+
+    window.updateRot = (id, type) => {
+        let list = type === 'A' ? [...state.rotationA] : [...state.rotationB];
+        list = list.includes(id) ? list.filter(i => i !== id) : [...list.slice(-4), id];
+        set(ref(db, `rotations/${type.toLowerCase()}`), list);
+    };
+
+    // --- PLAYER LOGICA ---
+    window.onSpotifyWebPlaybackSDKReady = () => {
+        const player = new Spotify.Player({
+            name: 'Koert.fm Studio Player',
+            getOAuthToken: cb => { cb(state.token); }
+        });
+
+        player.addListener('ready', ({ device_id }) => {
+            state.deviceId = device_id;
+            const btn = document.getElementById('play-btn');
+            btn.innerText = 'START UITZENDING';
+            btn.onclick = () => startRadio();
+        });
+
+        player.connect();
+        state.player = player;
+    };
+
+    async function startRadio() {
+        document.getElementById('play-btn').classList.add('hidden');
+        document.getElementById('radio-status').innerText = 'ON AIR';
+        playNext();
+    }
+
+    function playNext() {
+        state.counter++;
+        
+        // JINGLE CHECK (om de 5 nummers)
+        if (state.counter % 5 === 0) {
+            playJingle();
+            return;
+        }
+
+        // SCHEDULER (A/B/Pool)
+        let pool = state.allTracks;
+        if (state.counter % 30 <= 5 && state.rotationA.length > 0) {
+            pool = state.allTracks.filter(t => state.rotationA.includes(t.id));
+        } else if (state.counter % 100 === 1 && state.rotationB.length > 0) {
+            pool = state.allTracks.filter(t => state.rotationB.includes(t.id));
+        }
+
+        // Artist Separation
+        let valid = pool.filter(t => !state.history.includes(t.artists[0].id));
+        if (valid.length === 0) valid = pool;
+        const track = valid[Math.floor(Math.random() * valid.length)];
+
+        state.history.push(track.artists[0].id);
+        if (state.history.length > 10) state.history.shift();
+
+        playSpotify(track);
+    }
+
+    async function playSpotify(track) {
+        await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${state.deviceId}`, {
+            method: 'PUT',
+            body: JSON.stringify({ uris: [track.uri] }),
+            headers: { 'Authorization': `Bearer ${state.token}` }
+        });
+        
+        document.getElementById('track-title').innerText = track.name;
+        document.getElementById('track-artist').innerText = track.artists[0].name;
+        document.getElementById('album-art').src = track.album.images[0].url;
+
+        // Wacht tot nummer klaar is (versimpeld: check elke 5 sec)
+        setTimeout(() => checkFinished(), 5000);
+    }
+
+    function playJingle() {
+        // Vervang deze URL's door je eigen MP3's
+        const jingleUrls = ['https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3']; 
+        state.jingleAudio.src = jingleUrls[0];
+        document.getElementById('track-title').innerText = "KOERT FM JINGLE";
+        state.jingleAudio.play();
+        state.jingleAudio.onended = () => playNext();
+    }
+
+    function checkFinished() {
+        state.player.getCurrentState().then(s => {
+            if (s && s.paused && s.position === 0) playNext();
+            else setTimeout(() => checkFinished(), 3000);
+        });
+    }
+
+    checkToken();
+</script>
 </body>
 </html>
