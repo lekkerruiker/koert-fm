@@ -1,49 +1,14 @@
-<!DOCTYPE html>
-<html lang="nl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Koert.fm | Live Studio</title>
-    <style>
-        :root { --spotify-green: #1DB954; --bg-dark: #121212; --card-bg: #181818; }
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg-dark); color: white; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: 0 auto; }
-        .player-card { background: var(--card-bg); padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 40px; }
-        #album-art { width: 250px; height: 250px; background: #333; margin: 0 auto 20px; border-radius: 8px; display: block; object-fit: cover; }
-        .btn { background: var(--spotify-green); color: white; border: none; padding: 15px 30px; border-radius: 30px; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.2s; }
-        .btn:hover { transform: scale(1.05); }
-        .admin-box { background: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px solid #333; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #282828; }
-        .hidden { display: none; }
-    </style>
-</head>
-<body>
-
-<div class="container">
-    <div id="login-screen" class="player-card">
-        <h1>Koert.fm</h1>
-        <p>Maak verbinding met je Spotify Premium account.</p>
-        <button class="btn" onclick="loginSpotify()">START RADIO</button>
-    </div>
-
-    <div id="player-ui" class="player-card hidden">
-        <div id="radio-status" style="color: var(--spotify-green); font-weight: bold;">STAND-BY</div>
-        <img id="album-art" src="https://via.placeholder.com/250" alt="Album Art">
-        <h2 id="track-title">Druk op Play om de stream te starten</h2>
-        <p id="track-artist"></p>
-        <button id="play-btn" class="btn">LAAD PLAYER...</button>
-    </div>
-
-    <div id="admin-ui" class="admin-box hidden">
-        <h3>Studio Manager (A/B Rotatie)</h3>
+<div id="admin-ui" class="admin-box hidden">
+    <h3>Studio Manager (A/B Rotatie)</h3>
+    <input type="text" id="track-search" placeholder="Zoek nummer of artiest..." style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: none; background: #333; color: white;">
+    <div style="max-height: 500px; overflow-y: auto;">
         <table>
             <thead>
                 <tr>
                     <th>Track</th>
                     <th>Artiest</th>
-                    <th>A (Top 5)</th>
-                    <th>B (Top 5)</th>
+                    <th>A</th>
+                    <th>B</th>
                 </tr>
             </thead>
             <tbody id="track-table-body"></tbody>
@@ -51,15 +16,13 @@
     </div>
 </div>
 
-<script src="https://sdk.scdn.co/spotify-player.js"></script>
-
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // --- CONFIGURATIE ---
-    const CLIENT_ID = 'VUL_HIER_JE_SPOTIFY_CLIENT_ID_IN'; 
-    const PLAYLIST_ID = 'VUL_HIER_JE_PLAYLIST_ID_IN';
+    // --- CONFIGURATIE (Zorg dat je deze invult!) ---
+    const CLIENT_ID = 'JOUW_CLIENT_ID'; 
+    const PLAYLIST_ID = '8_JOUW_PLAYLIST_ID'; 
     const REDIRECT_URI = window.location.origin + window.location.pathname;
 
     const firebaseConfig = {
@@ -108,22 +71,43 @@
             const val = snapshot.val() || {};
             state.rotationA = val.a || [];
             state.rotationB = val.b || [];
-            fetchTracks();
+            if (state.allTracks.length === 0) fetchAllTracks();
+            else renderAdmin();
         });
     }
 
-    async function fetchTracks() {
-        const res = await fetch(`https://api.spotify.com/v1/playlists/${PLAYLIST_ID}/tracks`, {
-            headers: { 'Authorization': `Bearer ${state.token}` }
-        });
-        const data = await res.json();
-        state.allTracks = data.items.map(i => i.track);
+    // Haal alle 1795 nummers op (Spotify limiet is 100 per keer)
+    async function fetchAllTracks() {
+        let url = `https://api.spotify.com/v1/playlists/${PLAYLIST_ID}/tracks?limit=100`;
+        let tracks = [];
+        
+        document.getElementById('radio-status').innerText = 'STUDIO LADEN...';
+
+        while (url) {
+            const res = await fetch(url, { headers: { 'Authorization': `Bearer ${state.token}` } });
+            const data = await res.json();
+            tracks = tracks.concat(data.items.map(i => i.track).filter(t => t !== null));
+            url = data.next; // Spotify geeft de link naar de volgende 100 nummers
+        }
+
+        state.allTracks = tracks;
+        document.getElementById('radio-status').innerText = 'STAND-BY';
         renderAdmin();
     }
 
-    function renderAdmin() {
+    // Zoekfunctie koppelen
+    document.getElementById('track-search').addEventListener('input', (e) => {
+        renderAdmin(e.target.value.toLowerCase());
+    });
+
+    function renderAdmin(filter = "") {
         const body = document.getElementById('track-table-body');
-        body.innerHTML = state.allTracks.map(t => `
+        const filtered = state.allTracks.filter(t => 
+            t.name.toLowerCase().includes(filter) || 
+            t.artists[0].name.toLowerCase().includes(filter)
+        ).slice(0, 50); // Toon max 50 resultaten voor snelheid
+
+        body.innerHTML = filtered.map(t => `
             <tr>
                 <td>${t.name}</td>
                 <td>${t.artists[0].name}</td>
@@ -135,7 +119,12 @@
 
     window.updateRot = (id, type) => {
         let list = type === 'A' ? [...state.rotationA] : [...state.rotationB];
-        list = list.includes(id) ? list.filter(i => i !== id) : [...list.slice(-4), id];
+        if (list.includes(id)) {
+            list = list.filter(i => i !== id);
+        } else {
+            if (list.length >= 5) list.shift();
+            list.push(id);
+        }
         set(ref(db, `rotations/${type.toLowerCase()}`), list);
     };
 
@@ -166,23 +155,25 @@
     function playNext() {
         state.counter++;
         
-        // JINGLE CHECK (om de 5 nummers)
         if (state.counter % 5 === 0) {
             playJingle();
             return;
         }
 
-        // SCHEDULER (A/B/Pool)
         let pool = state.allTracks;
-        if (state.counter % 30 <= 5 && state.rotationA.length > 0) {
+        // Rotatie A: elke 30 nummers een blokje van 5 uit A
+        if (state.counter % 30 >= 1 && state.counter % 30 <= 5 && state.rotationA.length > 0) {
             pool = state.allTracks.filter(t => state.rotationA.includes(t.id));
-        } else if (state.counter % 100 === 1 && state.rotationB.length > 0) {
+        } 
+        // Rotatie B: nummer 1 van elke 100
+        else if (state.counter % 100 === 1 && state.rotationB.length > 0) {
             pool = state.allTracks.filter(t => state.rotationB.includes(t.id));
         }
 
-        // Artist Separation
+        // Artist Separation (Blokkeer artiesten uit de laatste 10 nummers)
         let valid = pool.filter(t => !state.history.includes(t.artists[0].id));
-        if (valid.length === 0) valid = pool;
+        if (valid.length === 0) valid = pool; // Fallback als de pool leeg dreigt te raken
+
         const track = valid[Math.floor(Math.random() * valid.length)];
 
         state.history.push(track.artists[0].id);
@@ -202,27 +193,32 @@
         document.getElementById('track-artist').innerText = track.artists[0].name;
         document.getElementById('album-art').src = track.album.images[0].url;
 
-        // Wacht tot nummer klaar is (versimpeld: check elke 5 sec)
-        setTimeout(() => checkFinished(), 5000);
+        // Start de monitoring om te zien wanneer het nummer eindigt
+        setTimeout(() => checkFinished(), 10000);
     }
 
     function playJingle() {
-        // Vervang deze URL's door je eigen MP3's
         const jingleUrls = ['https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3']; 
         state.jingleAudio.src = jingleUrls[0];
-        document.getElementById('track-title').innerText = "KOERT FM JINGLE";
+        document.getElementById('track-title').innerText = "⚡ JINGLE ⚡";
+        document.getElementById('radio-status').innerText = 'JINGLE';
         state.jingleAudio.play();
-        state.jingleAudio.onended = () => playNext();
+        state.jingleAudio.onended = () => {
+            document.getElementById('radio-status').innerText = 'ON AIR';
+            playNext();
+        };
     }
 
     function checkFinished() {
         state.player.getCurrentState().then(s => {
-            if (s && s.paused && s.position === 0) playNext();
-            else setTimeout(() => checkFinished(), 3000);
+            // Als het nummer gestopt is en we staan op 0, laad de volgende
+            if (s && s.paused && s.position === 0) {
+                playNext();
+            } else {
+                setTimeout(() => checkFinished(), 3000);
+            }
         });
     }
 
     checkToken();
 </script>
-</body>
-</html>
