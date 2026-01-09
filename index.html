@@ -1,28 +1,71 @@
-<div id="admin-ui" class="admin-box hidden">
-    <h3>Studio Manager (A/B Rotatie)</h3>
-    <input type="text" id="track-search" placeholder="Zoek nummer of artiest..." style="width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: none; background: #333; color: white;">
-    <div style="max-height: 500px; overflow-y: auto;">
-        <table>
-            <thead>
-                <tr>
-                    <th>Track</th>
-                    <th>Artiest</th>
-                    <th>A</th>
-                    <th>B</th>
-                </tr>
-            </thead>
-            <tbody id="track-table-body"></tbody>
-        </table>
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Koert.fm | Live Studio</title>
+    <style>
+        :root { --spotify-green: #1DB954; --bg-dark: #121212; --card-bg: #181818; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background-color: var(--bg-dark); color: white; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .player-card { background: var(--card-bg); padding: 30px; border-radius: 15px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 40px; }
+        #album-art { width: 250px; height: 250px; background: #333; margin: 0 auto 20px; border-radius: 8px; display: block; object-fit: cover; }
+        .btn { background: var(--spotify-green); color: white; border: none; padding: 15px 30px; border-radius: 30px; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.2s; }
+        .btn:hover { transform: scale(1.05); }
+        .admin-box { background: #1e1e1e; padding: 20px; border-radius: 10px; border: 1px solid #333; }
+        .search-bar { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 5px; border: 1px solid #444; background: #282828; color: white; box-sizing: border-box; }
+        .table-wrapper { max-height: 400px; overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #282828; }
+        .hidden { display: none; }
+        .status-badge { color: var(--spotify-green); font-weight: bold; margin-bottom: 10px; display: block; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="login-screen" class="player-card">
+        <h1>Koert.fm</h1>
+        <p>Studio Interface v2.0 (1795 tracks support)</p>
+        <button class="btn" onclick="loginSpotify()">START RADIO</button>
+    </div>
+
+    <div id="player-ui" class="player-card hidden">
+        <span id="radio-status" class="status-badge">STAND-BY</span>
+        <img id="album-art" src="https://via.placeholder.com/250" alt="Album Art">
+        <h2 id="track-title">Laden...</h2>
+        <p id="track-artist"></p>
+        <button id="play-btn" class="btn">INITIALISEREN...</button>
+    </div>
+
+    <div id="admin-ui" class="admin-box hidden">
+        <h3>Studio Manager</h3>
+        <input type="text" id="track-search" class="search-bar" placeholder="Zoek in 1795 nummers op titel of artiest...">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Track</th>
+                        <th>Artiest</th>
+                        <th>A (Hot)</th>
+                        <th>B (Recurrent)</th>
+                    </tr>
+                </thead>
+                <tbody id="track-table-body"></tbody>
+            </table>
+        </div>
     </div>
 </div>
+
+<script src="https://sdk.scdn.co/spotify-player.js"></script>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
     import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
-    // --- CONFIGURATIE (Zorg dat je deze invult!) ---
-    const CLIENT_ID = 'JOUW_CLIENT_ID'; 
-    const PLAYLIST_ID = '8_JOUW_PLAYLIST_ID'; 
+    // --- CONFIGURATIE ---
+    const CLIENT_ID = 'HIER_JE_ID'; 
+    const PLAYLIST_ID = 'HIER_JE_PLAYLIST_ID';
     const REDIRECT_URI = window.location.origin + window.location.pathname;
 
     const firebaseConfig = {
@@ -43,12 +86,11 @@
         allTracks: [],
         rotationA: [],
         rotationB: [],
-        history: [],
+        history: [], // Slaat Artist IDs op voor separation
         counter: 0,
-        jingleAudio: new Audio()
+        jingleAudio: new Audio('https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3') 
     };
 
-    // --- SPOTIFY AUTH ---
     window.loginSpotify = () => {
         const scope = 'streaming user-read-email user-read-private user-modify-playback-state user-read-playback-state';
         window.location.href = `https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`;
@@ -65,8 +107,8 @@
         }
     };
 
-    // --- RADIO ENGINE ---
     async function initRadio() {
+        // Luister naar Firebase voor A/B selecties
         onValue(ref(db, 'rotations'), (snapshot) => {
             const val = snapshot.val() || {};
             state.rotationA = val.a || [];
@@ -76,36 +118,38 @@
         });
     }
 
-    // Haal alle 1795 nummers op (Spotify limiet is 100 per keer)
     async function fetchAllTracks() {
+        document.getElementById('radio-status').innerText = "TRACKS LADEN...";
         let url = `https://api.spotify.com/v1/playlists/${PLAYLIST_ID}/tracks?limit=100`;
         let tracks = [];
-        
-        document.getElementById('radio-status').innerText = 'STUDIO LADEN...';
 
-        while (url) {
-            const res = await fetch(url, { headers: { 'Authorization': `Bearer ${state.token}` } });
-            const data = await res.json();
-            tracks = tracks.concat(data.items.map(i => i.track).filter(t => t !== null));
-            url = data.next; // Spotify geeft de link naar de volgende 100 nummers
+        try {
+            while (url) {
+                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${state.token}` } });
+                const data = await res.json();
+                tracks = tracks.concat(data.items.map(i => i.track).filter(t => t !== null));
+                url = data.next; // De 'next' link van Spotify voor de volgende 100
+            }
+            state.allTracks = tracks;
+            document.getElementById('radio-status').innerText = "STAND-BY";
+            document.getElementById('track-title').innerText = "Klaar voor uitzending";
+            renderAdmin();
+        } catch (e) {
+            console.error("Fout bij laden playlist:", e);
         }
-
-        state.allTracks = tracks;
-        document.getElementById('radio-status').innerText = 'STAND-BY';
-        renderAdmin();
     }
 
-    // Zoekfunctie koppelen
+    // Zoekfunctie
     document.getElementById('track-search').addEventListener('input', (e) => {
         renderAdmin(e.target.value.toLowerCase());
     });
 
-    function renderAdmin(filter = "") {
+    function renderAdmin(query = "") {
         const body = document.getElementById('track-table-body');
         const filtered = state.allTracks.filter(t => 
-            t.name.toLowerCase().includes(filter) || 
-            t.artists[0].name.toLowerCase().includes(filter)
-        ).slice(0, 50); // Toon max 50 resultaten voor snelheid
+            t.name.toLowerCase().includes(query) || 
+            t.artists[0].name.toLowerCase().includes(query)
+        ).slice(0, 50); // Toon max 50 voor snelheid
 
         body.innerHTML = filtered.map(t => `
             <tr>
@@ -122,103 +166,16 @@
         if (list.includes(id)) {
             list = list.filter(i => i !== id);
         } else {
+            // Maximaal 5 in de rotatie houden
             if (list.length >= 5) list.shift();
             list.push(id);
         }
         set(ref(db, `rotations/${type.toLowerCase()}`), list);
     };
 
-    // --- PLAYER LOGICA ---
+    // --- PLAYER ---
     window.onSpotifyWebPlaybackSDKReady = () => {
         const player = new Spotify.Player({
             name: 'Koert.fm Studio Player',
             getOAuthToken: cb => { cb(state.token); }
         });
-
-        player.addListener('ready', ({ device_id }) => {
-            state.deviceId = device_id;
-            const btn = document.getElementById('play-btn');
-            btn.innerText = 'START UITZENDING';
-            btn.onclick = () => startRadio();
-        });
-
-        player.connect();
-        state.player = player;
-    };
-
-    async function startRadio() {
-        document.getElementById('play-btn').classList.add('hidden');
-        document.getElementById('radio-status').innerText = 'ON AIR';
-        playNext();
-    }
-
-    function playNext() {
-        state.counter++;
-        
-        if (state.counter % 5 === 0) {
-            playJingle();
-            return;
-        }
-
-        let pool = state.allTracks;
-        // Rotatie A: elke 30 nummers een blokje van 5 uit A
-        if (state.counter % 30 >= 1 && state.counter % 30 <= 5 && state.rotationA.length > 0) {
-            pool = state.allTracks.filter(t => state.rotationA.includes(t.id));
-        } 
-        // Rotatie B: nummer 1 van elke 100
-        else if (state.counter % 100 === 1 && state.rotationB.length > 0) {
-            pool = state.allTracks.filter(t => state.rotationB.includes(t.id));
-        }
-
-        // Artist Separation (Blokkeer artiesten uit de laatste 10 nummers)
-        let valid = pool.filter(t => !state.history.includes(t.artists[0].id));
-        if (valid.length === 0) valid = pool; // Fallback als de pool leeg dreigt te raken
-
-        const track = valid[Math.floor(Math.random() * valid.length)];
-
-        state.history.push(track.artists[0].id);
-        if (state.history.length > 10) state.history.shift();
-
-        playSpotify(track);
-    }
-
-    async function playSpotify(track) {
-        await fetch(`https://api.spotify.com/v1/me/player/play?device_id=${state.deviceId}`, {
-            method: 'PUT',
-            body: JSON.stringify({ uris: [track.uri] }),
-            headers: { 'Authorization': `Bearer ${state.token}` }
-        });
-        
-        document.getElementById('track-title').innerText = track.name;
-        document.getElementById('track-artist').innerText = track.artists[0].name;
-        document.getElementById('album-art').src = track.album.images[0].url;
-
-        // Start de monitoring om te zien wanneer het nummer eindigt
-        setTimeout(() => checkFinished(), 10000);
-    }
-
-    function playJingle() {
-        const jingleUrls = ['https://www.soundjay.com/misc/sounds/bell-ringing-05.mp3']; 
-        state.jingleAudio.src = jingleUrls[0];
-        document.getElementById('track-title').innerText = "⚡ JINGLE ⚡";
-        document.getElementById('radio-status').innerText = 'JINGLE';
-        state.jingleAudio.play();
-        state.jingleAudio.onended = () => {
-            document.getElementById('radio-status').innerText = 'ON AIR';
-            playNext();
-        };
-    }
-
-    function checkFinished() {
-        state.player.getCurrentState().then(s => {
-            // Als het nummer gestopt is en we staan op 0, laad de volgende
-            if (s && s.paused && s.position === 0) {
-                playNext();
-            } else {
-                setTimeout(() => checkFinished(), 3000);
-            }
-        });
-    }
-
-    checkToken();
-</script>
